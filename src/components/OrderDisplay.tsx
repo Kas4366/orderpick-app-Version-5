@@ -23,7 +23,7 @@ interface OrderDisplayProps {
   voiceSettings: VoiceSettings;
   onMarkForReorder: (order: Order) => void;
   stockTrackingItems: StockTrackingItem[];
-  onUnmarkForReorder: (sku: string, markedDate: string) => void;
+  onUnmarkForReorder: (sku: string, markedDate: string, orderNumber: string) => void;
   autoCompleteEnabled?: boolean;
   packagingType?: string | null;
   currentOrderBoxName?: string | null;
@@ -56,12 +56,15 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
   const checkboxRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   
-  // Check if current order is already tracked for reordering
-  const currentTrackedItem = useMemo(() => {
-    return stockTrackingItems.find(item => 
-      item.sku === order.sku && 
-      item.orderNumber === order.orderNumber
+  const getTrackedItem = (sku: string, orderNumber: string) => {
+    return stockTrackingItems.find(item =>
+      item.sku === sku &&
+      item.orderNumber === orderNumber
     );
+  };
+
+  const currentTrackedItem = useMemo(() => {
+    return getTrackedItem(order.sku, order.orderNumber);
   }, [stockTrackingItems, order.sku, order.orderNumber]);
   
   // Global spacebar listener for reorder checkbox - FIXED
@@ -291,36 +294,34 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
     }
   };
 
-  // FIXED CHECKBOX TOGGLE FUNCTION
-  const handleCheckboxToggle = async () => {
-    console.log('🔘 Checkbox toggle triggered, current tracked item:', !!currentTrackedItem);
-    console.log('🔘 Order details:', { orderNumber: order.orderNumber, sku: order.sku, customerName: order.customerName });
+  const handleCheckboxToggle = async (itemOrder?: Order) => {
+    const targetOrder = itemOrder || order;
+    const trackedItem = getTrackedItem(targetOrder.sku, targetOrder.orderNumber);
+
+    console.log('🔘 Checkbox toggle triggered, current tracked item:', !!trackedItem);
+    console.log('🔘 Order details:', { orderNumber: targetOrder.orderNumber, sku: targetOrder.sku, customerName: targetOrder.customerName });
     console.log('🔘 Stock tracking items count:', stockTrackingItems.length);
-    
-    if (currentTrackedItem) {
-      // Item is already tracked, so unmark it
+
+    if (trackedItem) {
       console.log('🔘 Unmarking item for reorder');
-      onUnmarkForReorder(currentTrackedItem.sku, currentTrackedItem.markedDate);
+      onUnmarkForReorder(trackedItem.sku, trackedItem.markedDate, trackedItem.orderNumber);
     } else {
-      // Item is not tracked, so mark it
       console.log('🔘 Marking item for reorder');
-      onMarkForReorder(order);
-      
-      // Copy item details to clipboard in the specified format
+      onMarkForReorder(targetOrder);
+
       try {
-        const sku = order.sku;
-        const quantity = order.quantity;
-        const sellingPrice = order.orderValue !== undefined ? formatCurrency(order.orderValue) : 'N/A';
-        const binLocation = order.location || 'N/A';
-        const channelType = order.channelType || 'N/A';
-        
+        const sku = targetOrder.sku;
+        const quantity = targetOrder.quantity;
+        const sellingPrice = targetOrder.orderValue !== undefined ? formatCurrency(targetOrder.orderValue) : 'N/A';
+        const binLocation = targetOrder.location || 'N/A';
+        const channelType = targetOrder.channelType || 'N/A';
+
         const clipboardText = `(${sku}) (${quantity}) (${sellingPrice}) (${binLocation}) (${channelType})`;
-        
+
         await navigator.clipboard.writeText(clipboardText);
         console.log('📋 Copied to clipboard:', clipboardText);
       } catch (error) {
         console.warn('⚠️ Failed to copy to clipboard:', error);
-        // Don't show error to user - clipboard copy is a nice-to-have feature
       }
     }
   };
@@ -683,8 +684,10 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
               </div>
             )}
 
-            {groupedOrderItems.map((item, index) => (
-              <div key={`${item.sku}-${index}`} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+            {groupedOrderItems.map((item, index) => {
+              const itemTracked = getTrackedItem(item.sku, item.orderNumber);
+              return (
+              <div key={`${item.sku}-${item.orderNumber}-${index}`} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {/* Image */}
                   <div className="md:col-span-1">
@@ -801,11 +804,36 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
                           <p className="text-sm text-blue-900">{item.itemName}</p>
                         </div>
                       )}
+
+                      <div className="mt-4">
+                        <div className="bg-white border border-gray-200 rounded-lg p-3">
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="checkbox"
+                              checked={!!itemTracked}
+                              onChange={() => handleCheckboxToggle(item)}
+                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
+                            />
+                            <label
+                              className="text-sm font-medium text-gray-800 cursor-pointer"
+                              onClick={() => handleCheckboxToggle(item)}
+                            >
+                              {itemTracked ? 'Marked for reorder ✓' : 'Mark for reorder'}
+                            </label>
+                          </div>
+                          {itemTracked && (
+                            <div className="mt-2 flex items-center gap-1 text-xs text-green-600">
+                              <CheckCircle className="h-3 w-3" />
+                              <span>Added to reorder list</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-            ))}
+            )})}
           </div>
         ) : (
           /* Single item display - IMPROVED LAYOUT */

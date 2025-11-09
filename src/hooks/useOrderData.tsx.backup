@@ -674,32 +674,28 @@ export const useOrderData = () => {
     localStorage.setItem('voiceSettings', JSON.stringify(settings));
   };
 
-  const handleMarkForReorder = async (order: Order) => {
+  // Handle marking items for reorder
+  const handleMarkForReorder = (order: Order) => {
     if (order.remainingStock === undefined) return;
     
     console.log('📦 useOrderData: Marking item for reorder:', {
       sku: order.sku,
       orderNumber: order.orderNumber,
-      rowIndex: order.rowIndex,
       hasImageUrl: !!order.imageUrl,
       isLocalImage: order._isLocalImage,
       originalSkuForLocalImage: order._originalSkuForLocalImage,
       csvImagesFolderInfo: csvImagesFolderInfo
     });
 
-    const markedDate = new Date().toISOString();
-    const reorderTime = new Date().toLocaleString();
-
     const newItem: StockTrackingItem = {
       sku: order.sku,
-      markedDate: markedDate,
+      markedDate: new Date().toISOString(),
       orderNumber: order.orderNumber,
-      customerName: order.customerName,
+      customer: order.customerName,
       currentStock: order.remainingStock,
       location: order.location,
-      imageUrl: order.imageUrl,
-      rowIndex: order.rowIndex,
-      orderValue: order.orderValue,
+      imageUrl: order.imageUrl, // Include image URL from order
+      // Include local image source info if this was a local image
       localImageSource: order._isLocalImage && order._originalSkuForLocalImage && csvImagesFolderInfo ? {
         sku: order._originalSkuForLocalImage,
         folderName: csvImagesFolderInfo.folderName
@@ -708,7 +704,6 @@ export const useOrderData = () => {
     
     console.log('📦 useOrderData: Created new stock tracking item:', {
       sku: newItem.sku,
-      rowIndex: newItem.rowIndex,
       hasImageUrl: !!newItem.imageUrl,
       hasLocalImageSource: !!newItem.localImageSource,
       localImageSourceDetails: newItem.localImageSource
@@ -730,52 +725,19 @@ export const useOrderData = () => {
         hasImageUrl: !!newItem.imageUrl,
         hasLocalImageSource: !!newItem.localImageSource
       });
-
-      if (order.rowIndex) {
-        try {
-          console.log(`📤 Sending reorder info to Google Sheets for row ${order.rowIndex}`);
-          const result = await webhookService.sendReorderInfo(order.rowIndex, reorderTime);
-
-          if (result.success) {
-            console.log(`✅ Updated reorder timestamp for row ${order.rowIndex} in Google Sheets`);
-          } else {
-            console.warn(`⚠️ Failed to update reorder timestamp for row ${order.rowIndex}: ${result.message}`);
-          }
-        } catch (error) {
-          console.error(`❌ Error sending reorder info for row ${order.rowIndex}:`, error);
-        }
-      }
     } else {
       console.log('📦 useOrderData: Item already exists in stock tracking:', order.sku);
     }
   };
 
-  const removeStockTrackingItem = async (sku: string, markedDate: string, orderNumber: string) => {
-    const itemToRemove = stockTrackingItems.find(item =>
-      item.sku === sku && item.markedDate === markedDate && item.orderNumber === orderNumber
-    );
-
-    const updatedItems = stockTrackingItems.filter(item =>
-      !(item.sku === sku && item.markedDate === markedDate && item.orderNumber === orderNumber)
+  // Remove item from stock tracking
+  const removeStockTrackingItem = (sku: string, markedDate: string) => {
+    const updatedItems = stockTrackingItems.filter(item => 
+      !(item.sku === sku && item.markedDate === markedDate)
     );
     setStockTrackingItems(updatedItems);
     localStorage.setItem('stockTrackingItems', JSON.stringify(updatedItems));
-    console.log('📦 Removed item from stock tracking:', sku, markedDate, orderNumber);
-
-    if (itemToRemove?.rowIndex) {
-      try {
-        console.log(`📤 Clearing reorder info in Google Sheets for row ${itemToRemove.rowIndex}`);
-        const result = await webhookService.sendReorderInfo(itemToRemove.rowIndex, '');
-
-        if (result.success) {
-          console.log(`✅ Cleared reorder timestamp for row ${itemToRemove.rowIndex} in Google Sheets`);
-        } else {
-          console.warn(`⚠️ Failed to clear reorder timestamp for row ${itemToRemove.rowIndex}: ${result.message}`);
-        }
-      } catch (error) {
-        console.error(`❌ Error clearing reorder info for row ${itemToRemove.rowIndex}:`, error);
-      }
-    }
+    console.log('📦 Removed item from stock tracking:', sku, markedDate);
   };
 
   // Clear all stock tracking items

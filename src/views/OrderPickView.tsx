@@ -216,9 +216,9 @@ export const OrderPickView: React.FC = () => {
               </div>
               
               <div className="mt-3">
-                <CustomerSearch 
-                  onCustomerSearch={handleCustomerSearch}
-                  onQRCodeScan={handleQRCodeScan}
+                <CustomerSearch
+                  onCustomerSearch={(searchTerm) => handleCustomerSearch(searchTerm, currentSession?.employee.name)}
+                  onQRCodeScan={(qrData) => handleQRCodeScan(qrData, currentSession?.employee.name)}
                   onArrowNavigation={handleArrowNavigation}
                   searchMessage={searchMessage}
                   onClearMessage={() => setSearchMessage('')}

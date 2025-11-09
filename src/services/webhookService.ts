@@ -7,6 +7,12 @@ interface PackerInfoPayload {
   secretKey?: string;
 }
 
+interface ReorderInfoPayload {
+  rowIndex: number;
+  reorderTime: string;
+  secretKey?: string;
+}
+
 interface WebhookResponse {
   success: boolean;
   message?: string;
@@ -195,6 +201,96 @@ export const webhookService = {
       });
     } catch (error) {
       console.error('Failed to save webhook test result:', error);
+    }
+  },
+
+  async sendReorderInfo(
+    rowIndex: number,
+    reorderTime: string
+  ): Promise<{ success: boolean; message?: string }> {
+    try {
+      const settings = await googleSheetsService.getSettings();
+
+      if (!settings) {
+        console.warn('⚠️ No app settings found');
+        return { success: false, message: 'Settings not configured' };
+      }
+
+      if (!settings.webhook_enabled) {
+        console.log('ℹ️ Webhook is disabled, skipping reorder info update');
+        return { success: false, message: 'Webhook disabled' };
+      }
+
+      if (!settings.apps_script_webhook_url) {
+        console.warn('⚠️ Webhook URL not configured');
+        return { success: false, message: 'Webhook URL not configured' };
+      }
+
+      console.log(`📤 Sending reorder info via proxy for row ${rowIndex}...`);
+
+      const payload: ReorderInfoPayload = {
+        rowIndex,
+        reorderTime,
+      };
+
+      if (settings.apps_script_secret_key) {
+        payload.secretKey = settings.apps_script_secret_key;
+      }
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+      try {
+        const response = await fetch(EDGE_FUNCTION_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify({
+            appsScriptUrl: settings.apps_script_webhook_url,
+            payload,
+          }),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`❌ Reorder webhook proxy request failed with status ${response.status}:`, errorText);
+          return {
+            success: false,
+            message: `Webhook error: ${response.status} ${response.statusText}`,
+          };
+        }
+
+        const result: WebhookResponse = await response.json();
+
+        if (result.success) {
+          console.log(`✅ Successfully sent reorder info for row ${rowIndex}`);
+          return { success: true, message: result.message };
+        } else {
+          console.error('❌ Webhook returned error:', result.error || result.message);
+          return {
+            success: false,
+            message: result.error || result.message || 'Unknown webhook error',
+          };
+        }
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId);
+
+        if (fetchError.name === 'AbortError') {
+          console.error('❌ Reorder webhook request timed out after 15 seconds');
+          return { success: false, message: 'Request timeout' };
+        }
+
+        console.error('❌ Network error during reorder webhook request:', fetchError);
+        return { success: false, message: `Network error: ${fetchError.message}` };
+      }
+    } catch (error: any) {
+      console.error('❌ Error in sendReorderInfo:', error);
+      return { success: false, message: error.message || 'Unknown error' };
     }
   },
 };

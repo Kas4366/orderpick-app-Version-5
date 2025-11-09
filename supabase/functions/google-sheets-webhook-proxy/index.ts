@@ -8,8 +8,9 @@ const corsHeaders = {
 
 interface PackerInfoPayload {
   rowIndex: number;
-  packerName: string;
-  packedTime: string;
+  packerName?: string;
+  packedTime?: string;
+  reorderTime?: string;
   secretKey?: string;
 }
 
@@ -55,7 +56,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    if (!payload || !payload.packerName || !payload.packedTime) {
+    if (!payload || (!payload.packerName && !payload.reorderTime && payload.reorderTime !== '')) {
       return new Response(
         JSON.stringify({ success: false, error: "Missing required payload fields" }),
         {

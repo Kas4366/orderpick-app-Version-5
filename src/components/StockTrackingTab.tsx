@@ -5,7 +5,7 @@ import { findImageFile } from '../utils/imageUtils';
 
 interface StockTrackingTabProps {
   stockItems: StockTrackingItem[];
-  onRemoveItem: (sku: string, markedDate: string) => void;
+  onRemoveItem: (sku: string, markedDate: string, orderNumber: string) => void;
   onUpdateItem?: (sku: string, markedDate: string, updates: Partial<StockTrackingItem>) => void;
   csvImagesFolderHandle?: FileSystemDirectoryHandle | null;
   onSetCsvImagesFolder?: () => Promise<void>;
@@ -325,7 +325,7 @@ export const StockTrackingTab: React.FC<StockTrackingTabProps> = ({
                 </td>
                 <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
                   <button
-                    onClick={() => onRemoveItem(item.sku, item.markedDate)}
+                    onClick={() => onRemoveItem(item.sku, item.markedDate, item.orderNumber)}
                     className="text-red-600 hover:text-red-900"
                     title="Remove item"
                   >
