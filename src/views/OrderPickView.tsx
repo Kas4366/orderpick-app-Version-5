@@ -59,6 +59,8 @@ export const OrderPickView: React.FC = () => {
     packingInstruction,
     isPackingInstructionModalOpen,
     handlePackingInstructionComplete,
+    packingInstructionQueue,
+    currentQueueIndex,
     searchMessage,
     setSearchMessage,
     // Google Sheets order loading
@@ -298,8 +300,12 @@ export const OrderPickView: React.FC = () => {
       <PackingInstructionModal
         isOpen={isPackingInstructionModalOpen}
         instruction={packingInstruction}
-        orderNote={currentOrder?.notes || ''}
+        orderNote={packingInstructionQueue[currentQueueIndex]?.note || ''}
         onComplete={handlePackingInstructionComplete}
+        currentSku={packingInstructionQueue[currentQueueIndex]?.sku}
+        currentOrderNumber={packingInstructionQueue[currentQueueIndex]?.orderNumber}
+        currentIndex={currentQueueIndex}
+        totalItems={packingInstructionQueue.length}
       />
 
       <OrderMergeDialog

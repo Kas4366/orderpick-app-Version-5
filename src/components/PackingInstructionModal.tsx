@@ -7,13 +7,21 @@ interface PackingInstructionModalProps {
   instruction: PackingInstruction | null;
   orderNote: string;
   onComplete: () => void;
+  currentSku?: string;
+  currentOrderNumber?: string;
+  currentIndex?: number;
+  totalItems?: number;
 }
 
 export const PackingInstructionModal: React.FC<PackingInstructionModalProps> = ({
   isOpen,
   instruction,
   orderNote,
-  onComplete
+  onComplete,
+  currentSku,
+  currentOrderNumber,
+  currentIndex = 0,
+  totalItems = 1
 }) => {
   if (!isOpen || (!instruction && !orderNote)) return null;
 
@@ -32,27 +40,41 @@ export const PackingInstructionModal: React.FC<PackingInstructionModalProps> = (
   };
   
   const getSubHeaderText = () => {
+    const skuDisplay = currentSku || instruction?.sku || 'N/A';
+    const orderDisplay = currentOrderNumber ? ` • Order #${currentOrderNumber}` : '';
+
     if (hasInstruction && hasNote) {
-      return `SKU: ${instruction?.sku || 'N/A'} • Order Notes Included`;
+      return `SKU: ${skuDisplay}${orderDisplay} • Instructions & Notes`;
     } else if (hasInstruction) {
-      return `SKU: ${instruction?.sku}`;
+      return `SKU: ${skuDisplay}${orderDisplay}`;
     } else {
-      return 'Important information for this order';
+      return `SKU: ${skuDisplay}${orderDisplay} • Order Notes`;
     }
   };
+
+  const showProgress = totalItems > 1;
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-end items-start z-50 p-4">
       <div className="bg-white rounded-lg shadow-2xl max-w-md w-full border-4 border-orange-500">
         {/* Header */}
         <div className="bg-orange-500 text-white p-4 rounded-t-lg">
-          <div className="flex items-center gap-3">
-            <div className="h-8 w-8 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
-              <AlertTriangle className="h-5 w-5 text-white" />
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="h-8 w-8 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
+                <AlertTriangle className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold">{getHeaderText()}</h2>
+                <p className="text-orange-100 text-sm">{getSubHeaderText()}</p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-lg font-bold">{getHeaderText()}</h2>
-              <p className="text-orange-100 text-sm">{getSubHeaderText()}</p>
-            </div>
+            {showProgress && (
+              <div className="bg-white bg-opacity-20 rounded-lg px-3 py-1">
+                <p className="text-white font-bold text-sm">
+                  {currentIndex + 1} / {totalItems}
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -107,7 +129,14 @@ export const PackingInstructionModal: React.FC<PackingInstructionModalProps> = (
               className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white font-bold text-sm rounded-lg hover:bg-green-700 transition-colors shadow-lg"
             >
               <CheckCircle className="h-4 w-4" />
-              {hasInstruction && hasNote ? 'Instructions & Notes Read - Continue' : hasInstruction ? 'Instructions Followed - Continue' : 'Notes Read - Continue'}
+              {showProgress && currentIndex < totalItems - 1
+                ? `Acknowledged - Next Item (${currentIndex + 2}/${totalItems})`
+                : hasInstruction && hasNote
+                  ? 'Instructions & Notes Read - Continue'
+                  : hasInstruction
+                    ? 'Instructions Followed - Continue'
+                    : 'Notes Read - Continue'
+              }
             </button>
           </div>
         </div>

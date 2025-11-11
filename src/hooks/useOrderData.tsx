@@ -51,6 +51,16 @@ export const useOrderData = () => {
   const [packingInstruction, setPackingInstruction] = useState<PackingInstruction | null>(null);
   const [isPackingInstructionModalOpen, setIsPackingInstructionModalOpen] = useState(false);
 
+  // Queue for sequential packing instruction display
+  interface PackingInstructionQueueItem {
+    sku: string;
+    orderNumber: string;
+    instruction: PackingInstruction | null;
+    note: string;
+  }
+  const [packingInstructionQueue, setPackingInstructionQueue] = useState<PackingInstructionQueueItem[]>([]);
+  const [currentQueueIndex, setCurrentQueueIndex] = useState(0);
+
   // Local images folder state
   const [csvImagesFolderHandle, setCsvImagesFolderHandle] = useState<FileSystemDirectoryHandle | null>(null);
   const [csvImagesFolderInfo, setCsvImagesFolderInfo] = useState<LocalImagesFolderInfo | null>(null);
@@ -346,45 +356,119 @@ export const useOrderData = () => {
     const checkPackingInstructions = async () => {
       if (currentOrder && currentOrder.sku) {
         try {
-          console.log(`🔍 Checking for packing instructions for SKU: ${currentOrder.sku}`);
-          
+          console.log(`🔍 Checking for packing instructions for current order: ${currentOrder.orderNumber}, SKU: ${currentOrder.sku}`);
+
           // Initialize the service if needed
           await packingInstructionService.init();
-          
-          // Get instruction for current SKU
-          const instruction = await packingInstructionService.getInstruction(currentOrder.sku);
-          
-          if (instruction) {
-            console.log(`📋 Found packing instruction for SKU ${currentOrder.sku}:`, instruction.instruction);
-            setPackingInstruction(instruction);
+
+          // Get all items for this order (handles merged and multiple item orders)
+          const groupedItems = getGroupedOrderItems(currentOrder, orders);
+          console.log(`📦 Found ${groupedItems.length} item(s) in this order group`);
+
+          // Build queue of items that need modal display (have instructions or notes)
+          const queue: PackingInstructionQueueItem[] = [];
+
+          for (const item of groupedItems) {
+            const instruction = await packingInstructionService.getInstruction(item.sku);
+            const hasNote = item.notes && item.notes.trim() !== '';
+
+            if (instruction || hasNote) {
+              queue.push({
+                sku: item.sku,
+                orderNumber: item.orderNumber,
+                instruction: instruction,
+                note: item.notes || ''
+              });
+              console.log(`📋 Added to queue: SKU ${item.sku}, Order ${item.orderNumber}, Has instruction: ${!!instruction}, Has note: ${hasNote}`);
+            }
+          }
+
+          // Sort queue by SKU for consistent ordering
+          queue.sort((a, b) => a.sku.localeCompare(b.sku));
+
+          if (queue.length > 0) {
+            console.log(`✅ Built packing instruction queue with ${queue.length} item(s)`);
+            setPackingInstructionQueue(queue);
+            setCurrentQueueIndex(0);
+
+            // Set the first item in the queue and open modal
+            setPackingInstruction(queue[0].instruction);
             setIsPackingInstructionModalOpen(true);
           } else {
-            console.log(`⚠️ No packing instruction found for SKU: ${currentOrder.sku}`);
+            console.log(`⚠️ No packing instructions or notes found for any items`);
+            setPackingInstructionQueue([]);
+            setCurrentQueueIndex(0);
             setPackingInstruction(null);
-        // Show modal if there's either a packing instruction OR order notes
-        if (instruction || (currentOrder.notes && currentOrder.notes.trim())) {
-          setIsPackingInstructionModalOpen(true);
-        }
+            setIsPackingInstructionModalOpen(false);
           }
         } catch (error) {
           console.error('❌ Error checking for packing instructions:', error);
+          setPackingInstructionQueue([]);
+          setCurrentQueueIndex(0);
           setPackingInstruction(null);
           setIsPackingInstructionModalOpen(false);
         }
       } else {
+        setPackingInstructionQueue([]);
+        setCurrentQueueIndex(0);
         setPackingInstruction(null);
         setIsPackingInstructionModalOpen(false);
       }
     };
 
     checkPackingInstructions();
-  }, [currentOrder]);
+  }, [currentOrder, orders]);
+
+  // Helper function to get grouped order items (same logic as OrderDisplay component)
+  const getGroupedOrderItems = (order: Order, allOrders: Order[]): Order[] => {
+    if (!allOrders || allOrders.length === 0) return [order];
+
+    // Check if this is a merged order (same customer + same postcode, different order numbers)
+    const hasMergedOrders = allOrders.some(o =>
+      o.customerName === order.customerName &&
+      o.buyerPostcode === order.buyerPostcode &&
+      o.orderNumber !== order.orderNumber &&
+      o.buyerPostcode && o.buyerPostcode.trim() !== ''
+    );
+
+    if (hasMergedOrders) {
+      // Find all items with same customer and postcode (merged orders)
+      const mergedItems = allOrders.filter(o =>
+        o.customerName === order.customerName &&
+        o.buyerPostcode === order.buyerPostcode
+      );
+      return mergedItems;
+    } else {
+      // Find all items with the same order number and customer name (multiple items)
+      const sameOrderItems = allOrders.filter(o =>
+        o.orderNumber === order.orderNumber &&
+        o.customerName === order.customerName
+      );
+      return sameOrderItems.length > 1 ? sameOrderItems : [order];
+    }
+  };
 
   // Handle packing instruction completion
   const handlePackingInstructionComplete = () => {
     console.log('✅ Packing instruction acknowledged by user');
-    setIsPackingInstructionModalOpen(false);
-    setPackingInstruction(null);
+
+    // Check if there are more items in the queue
+    if (currentQueueIndex < packingInstructionQueue.length - 1) {
+      const nextIndex = currentQueueIndex + 1;
+      const nextItem = packingInstructionQueue[nextIndex];
+
+      console.log(`➡️ Moving to next item in queue: ${nextIndex + 1}/${packingInstructionQueue.length}, SKU: ${nextItem.sku}`);
+
+      setCurrentQueueIndex(nextIndex);
+      setPackingInstruction(nextItem.instruction);
+      // Modal stays open for next item
+    } else {
+      console.log('✅ All packing instructions acknowledged, closing modal');
+      setIsPackingInstructionModalOpen(false);
+      setPackingInstruction(null);
+      setPackingInstructionQueue([]);
+      setCurrentQueueIndex(0);
+    }
   };
 
   // Archive orders when they are loaded (with file name extraction)
@@ -1585,6 +1669,8 @@ export const useOrderData = () => {
     packingInstruction,
     isPackingInstructionModalOpen,
     handlePackingInstructionComplete,
+    packingInstructionQueue,
+    currentQueueIndex,
     // Google Sheets order loading
     loadOrdersFromGoogleSheets,
     isMergeDialogOpen,
